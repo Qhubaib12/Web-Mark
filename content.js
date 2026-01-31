@@ -135,6 +135,13 @@ async function captureFullPageScreenshot() {
   const originalX = window.scrollX;
   const originalY = window.scrollY;
   const originalOverflow = document.documentElement.style.overflow;
+  const hadBanner = Boolean(bannerDiv);
+  const originalBannerDisplay = bannerDiv?.style.display || '';
+  const hadPushedClass = document.documentElement.classList.contains('wm-pushed');
+  if (bannerDiv) {
+    bannerDiv.style.display = 'none';
+  }
+  document.documentElement.classList.remove('wm-pushed');
   document.documentElement.style.overflow = 'hidden';
 
   const totalWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
@@ -169,6 +176,12 @@ async function captureFullPageScreenshot() {
 
   document.documentElement.style.overflow = originalOverflow;
   window.scrollTo(originalX, originalY);
+  if (hadPushedClass) {
+    document.documentElement.classList.add('wm-pushed');
+  }
+  if (hadBanner && bannerDiv) {
+    bannerDiv.style.display = originalBannerDisplay;
+  }
 
   const fullDataUrl = canvas.toDataURL('image/png');
   chrome.runtime.sendMessage({ action: "download_screenshot", dataUrl: fullDataUrl });
