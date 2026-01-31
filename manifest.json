@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Web Mark",
+  "version": "1.5",
+  "permissions": [
+    "scripting",
+    "storage",
+    "activeTab",
+    "downloads"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Toggle Web Mark"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "128": "icon.png"
+  }
+}

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Mark Settings</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 20px; background: #f0f2f5; color: #1c1e21; }
+        .container { max-width: 480px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin: auto; }
+        h2 { margin: 0 0 20px 0; font-size: 20px; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        .section { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+        select, input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccd0d5; border-radius: 6px; font-size: 14px; }
+        .checkbox-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 8px; }
+        .check-item { display: flex; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
+        .status { color: #28a745; font-weight: bold; text-align: center; height: 20px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Web Mark Settings</h2>
+        <div class="section"><label class="check-item"><input type="checkbox" id="enabled"> <strong>Enable Extension</strong></label></div>
+        <div class="section">
+            <label>Visible Information</label>
+            <div class="checkbox-group">
+                <label class="check-item"><input type="checkbox" id="showUrl"> Full URL</label>
+                <label class="check-item"><input type="checkbox" id="showDate"> Date</label>
+                <label class="check-item"><input type="checkbox" id="showTime"> Time & Zone</label>
+                <label class="check-item"><input type="checkbox" id="showCountry"> Country</label>
+            </div>
+        </div>
+        <div class="section">
+            <label for="timezone">Global Time Zone</label>
+            <select id="timezone"><option value="auto">Auto (System Default)</option></select>
+        </div>
+        <div class="section">
+            <label for="manualCountry">Manual Country Override</label>
+            <input type="text" id="manualCountry" placeholder="e.g. United Kingdom">
+        </div>
+        <div class="section">
+            <label for="theme">Banner Style</label>
+            <select id="theme"><option value="light">Light Theme</option><option value="dark">Dark Theme</option></select>
+        </div>
+        <div id="status" class="status"></div>
+    </div>
+    <script src="options.js"></script>
+</body>
+</html>
