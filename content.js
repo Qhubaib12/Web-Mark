@@ -137,11 +137,7 @@ async function captureFullPageScreenshot() {
   const originalOverflow = document.documentElement.style.overflow;
   const hadBanner = Boolean(bannerDiv);
   const originalBannerDisplay = bannerDiv?.style.display || '';
-  const hadPushedClass = document.documentElement.classList.contains('wm-pushed');
-  if (bannerDiv) {
-    bannerDiv.style.display = 'none';
-  }
-  document.documentElement.classList.remove('wm-pushed');
+  let bannerHiddenForCapture = false;
   document.documentElement.style.overflow = 'hidden';
 
   const totalWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
@@ -157,6 +153,10 @@ async function captureFullPageScreenshot() {
 
   for (let y = 0; y < totalHeight; y += viewportHeight) {
     for (let x = 0; x < totalWidth; x += viewportWidth) {
+      if (bannerDiv && !bannerHiddenForCapture && !(x === 0 && y === 0)) {
+        bannerDiv.style.display = 'none';
+        bannerHiddenForCapture = true;
+      }
       window.scrollTo(x, y);
       await new Promise((resolve) => setTimeout(resolve, 200));
       const dataUrl = await new Promise((resolve) => {
@@ -176,9 +176,6 @@ async function captureFullPageScreenshot() {
 
   document.documentElement.style.overflow = originalOverflow;
   window.scrollTo(originalX, originalY);
-  if (hadPushedClass) {
-    document.documentElement.classList.add('wm-pushed');
-  }
   if (hadBanner && bannerDiv) {
     bannerDiv.style.display = originalBannerDisplay;
   }
