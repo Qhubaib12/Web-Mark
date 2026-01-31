@@ -22,6 +22,7 @@
 .wm-wrap { display: flex; gap: 20px; overflow: hidden; flex: 1; margin-right: 20px; }
 .wm-box { display: flex; align-items: center; white-space: nowrap; }
 .wm-url-box { max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.wm-ua-box { max-width: 30%; overflow: hidden; text-overflow: ellipsis; }
 .wm-box span { font-weight: bold; margin-right: 5px; opacity: 0.6; flex-shrink: 0; }
 
 .wm-actions { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
