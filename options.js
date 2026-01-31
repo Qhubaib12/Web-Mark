@@ -1,4 +1,32 @@
-const fields = ['enabled', 'showUrl', 'showDate', 'showTime', 'showCountry', 'timezone', 'manualCountry', 'theme'];
+const fields = [
+  'enabled',
+  'showUrl',
+  'showDate',
+  'showTime',
+  'showCountry',
+  'showIp',
+  'showViewport',
+  'showUserAgent',
+  'timezone',
+  'manualCountry',
+  'theme',
+  'screenshotType'
+];
+
+const defaults = {
+  enabled: true,
+  showUrl: true,
+  showDate: true,
+  showTime: true,
+  showCountry: true,
+  showIp: false,
+  showViewport: false,
+  showUserAgent: false,
+  timezone: 'auto',
+  manualCountry: '',
+  theme: 'light',
+  screenshotType: 'visible'
+};
 
 const populateTimezones = () => {
   const select = document.getElementById('timezone');
@@ -30,9 +58,9 @@ const load = () => {
     fields.forEach(f => {
       const el = document.getElementById(f);
       if (el.type === 'checkbox') {
-        el.checked = items[f] ?? true;
+        el.checked = items[f] ?? defaults[f];
       } else {
-        el.value = items[f] || (f === 'timezone' ? 'auto' : '');
+        el.value = items[f] || defaults[f];
       }
     });
   });
