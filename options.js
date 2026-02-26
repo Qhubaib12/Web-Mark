@@ -13,7 +13,7 @@ const fields = [
   'screenshotType'
 ];
 
-const defaults = {
+const defaults = window.WEB_MARK_DEFAULTS || {
   enabled: true,
   showUrl: true,
   showDate: true,
@@ -30,8 +30,8 @@ const defaults = {
 
 const populateTimezones = () => {
   const select = document.getElementById('timezone');
-  const allTimezones = Intl.supportedValuesOf('timeZone');
-  allTimezones.forEach(tz => {
+  if (typeof Intl.supportedValuesOf !== 'function') return;
+  Intl.supportedValuesOf('timeZone').forEach((tz) => {
     const opt = document.createElement('option');
     opt.value = tz;
     opt.textContent = tz.replace(/_/g, ' ');
@@ -41,30 +41,35 @@ const populateTimezones = () => {
 
 const save = () => {
   const data = {};
-  fields.forEach(f => {
-    const el = document.getElementById(f);
-    data[f] = el.type === 'checkbox' ? el.checked : el.value;
+  fields.forEach((field) => {
+    const el = document.getElementById(field);
+    data[field] = el.type === 'checkbox' ? el.checked : el.value;
   });
+
   chrome.storage.sync.set(data, () => {
     const status = document.getElementById('status');
-    status.innerText = "Saved Successfully!";
-    setTimeout(() => { status.innerText = ""; }, 1500);
+    status.innerText = 'Saved successfully.';
+    setTimeout(() => {
+      status.innerText = '';
+    }, 1500);
   });
 };
 
 const load = () => {
   populateTimezones();
   chrome.storage.sync.get(fields, (items) => {
-    fields.forEach(f => {
-      const el = document.getElementById(f);
+    fields.forEach((field) => {
+      const el = document.getElementById(field);
       if (el.type === 'checkbox') {
-        el.checked = items[f] ?? defaults[f];
+        el.checked = items[field] ?? defaults[field];
       } else {
-        el.value = items[f] || defaults[f];
+        el.value = items[field] || defaults[field];
       }
     });
   });
 };
 
 document.addEventListener('DOMContentLoaded', load);
-document.querySelectorAll('input, select').forEach(el => el.onchange = save);
+document.querySelectorAll('input, select').forEach((el) => {
+  el.onchange = save;
+});

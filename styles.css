@@ -1,19 +1,19 @@
-#web-mark-container { 
-    all: initial; 
-    position: fixed; 
-    top: 0; 
-    left: 0; 
-    width: 100%; 
-    height: 40px; 
-    z-index: 2147483647; 
-    display: flex; 
-    align-items: center; 
-    justify-content: space-between; 
-    padding: 0 20px; 
-    box-sizing: border-box; 
-    font-family: Arial, sans-serif; 
-    font-size: 12px; 
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+#web-mark-container {
+    all: initial;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 40px;
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
 :root { --wm-banner-offset: 0px; }
@@ -29,37 +29,47 @@
 
 .wm-actions { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
 
-#wm-screenshot { 
-    background: none; 
-    border: none; 
-    cursor: pointer; 
-    font-size: 16px; 
-    padding: 0; 
-    margin: 0; 
-    opacity: 0.5; 
-    transition: opacity 0.2s; 
-    display: flex; 
-    align-items: center; 
+#wm-screenshot {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+    margin: 0;
+    opacity: 0.65;
+    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
     color: inherit;
 }
 
 #wm-screenshot:hover { opacity: 1; }
 
-#wm-close { 
-    background: none; 
-    border: none; 
-    font-size: 20px; 
-    cursor: pointer; 
-    color: inherit; 
-    opacity: 0.5; 
-    padding: 0; 
-    margin: 0; 
+#wm-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.65;
+    padding: 0;
+    margin: 0;
     line-height: 1;
 }
 
 #wm-close:hover { opacity: 1; }
 
-html.wm-pushed body { padding-top: var(--wm-banner-offset) !important; }
+#wm-screenshot:focus-visible,
+#wm-close:focus-visible {
+    outline: 2px solid #4da3ff;
+    outline-offset: 2px;
+    border-radius: 3px;
+    opacity: 1;
+}
+
+html.wm-pushed body {
+    padding-top: var(--wm-banner-offset) !important;
+}
 
 html.wm-pushed .wm-offset-element {
     top: calc(var(--wm-original-top, 0px) + var(--wm-banner-offset)) !important;
