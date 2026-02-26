@@ -16,6 +16,8 @@
     box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
 }
 
+:root { --wm-banner-offset: 0px; }
+
 .wm-light { background: white !important; color: #333 !important; border-bottom: 1px solid #ccc; }
 .wm-dark { background: #1a1a1a !important; color: #eee !important; border-bottom: 1px solid #444; }
 
@@ -57,4 +59,8 @@
 
 #wm-close:hover { opacity: 1; }
 
-html.wm-pushed { margin-top: 40px !important; }
+html.wm-pushed body { padding-top: var(--wm-banner-offset) !important; }
+
+html.wm-pushed .wm-offset-element {
+    top: calc(var(--wm-original-top, 0px) + var(--wm-banner-offset)) !important;
+}
