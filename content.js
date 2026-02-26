@@ -132,6 +132,61 @@ async function loadSettings() {
   currentSettings = await chrome.storage.sync.get(settingsKey);
 }
 
+function collectTopPinnedElements() {
+  const candidates = new Set();
+  const sampleY = 8;
+  const sampleXs = [
+    Math.max(8, Math.floor(window.innerWidth * 0.1)),
+    Math.floor(window.innerWidth * 0.5),
+    Math.max(8, Math.floor(window.innerWidth * 0.9))
+  ];
+
+  sampleXs.forEach((x) => {
+    document.elementsFromPoint(x, sampleY).forEach((el) => {
+      if (!(el instanceof HTMLElement) || el === bannerDiv || el.id === 'web-mark-container') return;
+      let current = el;
+      while (current && current !== document.body && current !== document.documentElement) {
+        const style = window.getComputedStyle(current);
+        const topPx = parseFloat(style.top);
+        const top = Number.isFinite(topPx) ? topPx : 0;
+        if ((style.position === 'fixed' || style.position === 'sticky') && top <= 2) {
+          candidates.add(current);
+          break;
+        }
+        current = current.parentElement;
+      }
+    });
+  });
+
+  return candidates;
+}
+
+function clearLayoutOffset() {
+  document.documentElement.classList.remove('wm-pushed');
+  document.documentElement.style.removeProperty('--wm-banner-offset');
+  adjustedLayoutElements.forEach((el) => {
+    el.classList.remove('wm-offset-element');
+    el.style.removeProperty('--wm-original-top');
+  });
+  adjustedLayoutElements.clear();
+}
+
+function applyLayoutOffset() {
+  document.documentElement.classList.add('wm-pushed');
+  document.documentElement.style.setProperty('--wm-banner-offset', `${BANNER_HEIGHT}px`);
+  const pinnedElements = collectTopPinnedElements();
+  pinnedElements.forEach((el) => {
+    if (!adjustedLayoutElements.has(el)) {
+      const style = window.getComputedStyle(el);
+      const topPx = parseFloat(style.top);
+      const top = Number.isFinite(topPx) ? topPx : 0;
+      el.style.setProperty('--wm-original-top', `${top}px`);
+      el.classList.add('wm-offset-element');
+      adjustedLayoutElements.add(el);
+    }
+  });
+}
+
 async function render() {
   if (!chrome.runtime?.id) return;
   try {
