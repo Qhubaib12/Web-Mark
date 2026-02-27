@@ -64,5 +64,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         saveAs: false
       });
     });
+    return true;
   }
+
+  return false;
 });

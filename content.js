@@ -3,49 +3,43 @@ window.hasWebMarkLoaded = true;
 const BANNER_HEIGHT = 40;
 const MAX_CAPTURE_PIXELS = 268000000;
 const MAX_CAPTURE_DIMENSION = 32767;
+const LAYOUT_OBSERVER_LIFETIME_MS = 5000;
 
 let bannerVisible = true;
 let bannerDiv = null;
 let detectedCountry = null;
 let detectedIp = null;
-let currentSettings = { ...(window.WEB_MARK_DEFAULTS || {}) };
+let currentSettings = (window.WEB_MARK_NORMALIZE_SETTINGS || ((v) => v))(window.WEB_MARK_DEFAULTS || {});
 let layoutObserver = null;
+let layoutObserverStopTimer = null;
 let layoutRescanTimer = null;
+let animationBlockStyle = null;
 const adjustedLayoutElements = new Set();
 
-const settingsKey = window.WEB_MARK_DEFAULTS || {
-  enabled: true,
-  showUrl: true,
-  showDate: true,
-  showTime: true,
-  showCountry: true,
-  showIp: false,
-  showViewport: false,
-  showUserAgent: false,
-  timezone: 'auto',
-  manualCountry: '',
-  theme: 'light',
-  screenshotType: 'visible'
-};
+const normalizeSettings = window.WEB_MARK_NORMALIZE_SETTINGS || ((input) => ({ ...(window.WEB_MARK_DEFAULTS || {}), ...input }));
+const settingsKey = window.WEB_MARK_DEFAULTS || {};
 
 window.toggleWebMark = function toggleWebMark() {
   bannerVisible = !bannerVisible;
   render();
 };
 
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+function getCaptureProfile(quality) {
+  switch (quality) {
+    case 'fast': return { overlap: 0, settleMs: 40, disableAnimation: false };
+    case 'stable': return { overlap: 32, settleMs: 180, disableAnimation: true };
+    default: return { overlap: 16, settleMs: 100, disableAnimation: false };
+  }
 }
 
 function stopLayoutObserver() {
   if (layoutObserver) {
     layoutObserver.disconnect();
     layoutObserver = null;
+  }
+  if (layoutObserverStopTimer) {
+    clearTimeout(layoutObserverStopTimer);
+    layoutObserverStopTimer = null;
   }
   if (layoutRescanTimer) {
     clearTimeout(layoutRescanTimer);
@@ -54,12 +48,16 @@ function stopLayoutObserver() {
 }
 
 function scheduleLayoutRescan() {
-  if (!bannerVisible || !bannerDiv) return;
+  if (!bannerVisible || !bannerDiv || !currentSettings.smartHeaderOffset) return;
   if (layoutRescanTimer) return;
   layoutRescanTimer = setTimeout(() => {
     layoutRescanTimer = null;
-    clearLayoutOffset();
-    applyLayoutOffset();
+    adjustedLayoutElements.forEach((el) => {
+      el.classList.remove('wm-offset-element');
+      el.style.removeProperty('--wm-original-top');
+    });
+    adjustedLayoutElements.clear();
+    applySmartHeaderOffset();
   }, 120);
 }
 
@@ -105,18 +103,16 @@ function clearLayoutOffset() {
   stopLayoutObserver();
 }
 
-function applyLayoutOffset() {
-  document.documentElement.classList.add('wm-pushed');
-  document.documentElement.style.setProperty('--wm-banner-offset', `${BANNER_HEIGHT}px`);
+function applySmartHeaderOffset() {
+  if (!currentSettings.smartHeaderOffset) return;
   collectTopPinnedElements().forEach((el) => {
-    if (!adjustedLayoutElements.has(el)) {
-      const style = window.getComputedStyle(el);
-      const topPx = parseFloat(style.top);
-      const top = Number.isFinite(topPx) ? topPx : 0;
-      el.style.setProperty('--wm-original-top', `${top}px`);
-      el.classList.add('wm-offset-element');
-      adjustedLayoutElements.add(el);
-    }
+    if (adjustedLayoutElements.has(el)) return;
+    const style = window.getComputedStyle(el);
+    const topPx = parseFloat(style.top);
+    const top = Number.isFinite(topPx) ? topPx : 0;
+    el.style.setProperty('--wm-original-top', `${top}px`);
+    el.classList.add('wm-offset-element');
+    adjustedLayoutElements.add(el);
   });
 
   layoutObserver = new MutationObserver(scheduleLayoutRescan);
@@ -126,73 +122,105 @@ function applyLayoutOffset() {
     subtree: true,
     attributeFilter: ['class', 'style']
   });
-}
-
-async function loadSettings() {
-  currentSettings = await chrome.storage.sync.get(settingsKey);
-}
-
-function collectTopPinnedElements() {
-  const candidates = new Set();
-  const sampleY = 8;
-  const sampleXs = [
-    Math.max(8, Math.floor(window.innerWidth * 0.1)),
-    Math.floor(window.innerWidth * 0.5),
-    Math.max(8, Math.floor(window.innerWidth * 0.9))
-  ];
-
-  sampleXs.forEach((x) => {
-    document.elementsFromPoint(x, sampleY).forEach((el) => {
-      if (!(el instanceof HTMLElement) || el === bannerDiv || el.id === 'web-mark-container') return;
-      let current = el;
-      while (current && current !== document.body && current !== document.documentElement) {
-        const style = window.getComputedStyle(current);
-        const topPx = parseFloat(style.top);
-        const top = Number.isFinite(topPx) ? topPx : 0;
-        if ((style.position === 'fixed' || style.position === 'sticky') && top <= 2) {
-          candidates.add(current);
-          break;
-        }
-        current = current.parentElement;
-      }
-    });
-  });
-
-  return candidates;
-}
-
-function clearLayoutOffset() {
-  document.documentElement.classList.remove('wm-pushed');
-  document.documentElement.style.removeProperty('--wm-banner-offset');
-  adjustedLayoutElements.forEach((el) => {
-    el.classList.remove('wm-offset-element');
-    el.style.removeProperty('--wm-original-top');
-  });
-  adjustedLayoutElements.clear();
+  layoutObserverStopTimer = setTimeout(stopLayoutObserver, LAYOUT_OBSERVER_LIFETIME_MS);
 }
 
 function applyLayoutOffset() {
   document.documentElement.classList.add('wm-pushed');
   document.documentElement.style.setProperty('--wm-banner-offset', `${BANNER_HEIGHT}px`);
-  const pinnedElements = collectTopPinnedElements();
-  pinnedElements.forEach((el) => {
-    if (!adjustedLayoutElements.has(el)) {
-      const style = window.getComputedStyle(el);
-      const topPx = parseFloat(style.top);
-      const top = Number.isFinite(topPx) ? topPx : 0;
-      el.style.setProperty('--wm-original-top', `${top}px`);
-      el.classList.add('wm-offset-element');
-      adjustedLayoutElements.add(el);
-    }
-  });
+  applySmartHeaderOffset();
+}
+
+function setCurrentSettings(nextSettings, persistMigration = false) {
+  currentSettings = normalizeSettings(nextSettings);
+  if (persistMigration) {
+    chrome.storage.sync.set(currentSettings);
+  }
+}
+
+async function loadSettings() {
+  const loaded = await chrome.storage.sync.get(settingsKey);
+  const normalized = normalizeSettings(loaded);
+  const migrated = JSON.stringify(loaded) !== JSON.stringify(normalized);
+  setCurrentSettings(normalized, migrated);
+}
+
+function createInfoBox(label, value, className = '', titleValue = '') {
+  const box = document.createElement('div');
+  box.className = `wm-box${className ? ` ${className}` : ''}`;
+
+  const labelEl = document.createElement('span');
+  labelEl.textContent = `${label}:`;
+  box.appendChild(labelEl);
+
+  const valueEl = document.createElement('span');
+  valueEl.className = 'wm-value';
+  valueEl.textContent = value;
+  box.appendChild(valueEl);
+
+  if (titleValue) {
+    box.title = titleValue;
+  }
+
+  return box;
+}
+
+function createBannerLayout(settings, values) {
+  const wrap = document.createElement('div');
+  wrap.className = 'wm-wrap';
+
+  if (settings.showUrl) {
+    wrap.appendChild(createInfoBox('URL', values.url, 'wm-url-box', values.url));
+  }
+  if (settings.showDate) {
+    wrap.appendChild(createInfoBox('DATE', values.date));
+  }
+  if (settings.showTime) {
+    wrap.appendChild(createInfoBox('TIME', values.time));
+  }
+  if (settings.showCountry) {
+    wrap.appendChild(createInfoBox('LOC', values.country || 'Unknown'));
+  }
+  if (settings.showIp) {
+    wrap.appendChild(createInfoBox('IP', values.ip || 'Unavailable'));
+  }
+  if (settings.showViewport) {
+    wrap.appendChild(createInfoBox('VIEW', values.viewport));
+  }
+  if (settings.showUserAgent) {
+    wrap.appendChild(createInfoBox('UA', values.userAgent, 'wm-ua-box', values.userAgent));
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'wm-actions';
+
+  const screenshotButton = document.createElement('button');
+  screenshotButton.id = 'wm-screenshot';
+  screenshotButton.setAttribute('aria-label', 'Take screenshot');
+  screenshotButton.title = 'Download Screenshot';
+  screenshotButton.textContent = '📷';
+  screenshotButton.onclick = () => handleScreenshot(settings.screenshotType, settings.screenshotQuality);
+
+  const closeButton = document.createElement('button');
+  closeButton.id = 'wm-close';
+  closeButton.setAttribute('aria-label', 'Hide banner');
+  closeButton.title = 'Hide Banner';
+  closeButton.textContent = '×';
+  closeButton.onclick = () => window.toggleWebMark();
+
+  actions.appendChild(screenshotButton);
+  actions.appendChild(closeButton);
+
+  bannerDiv.replaceChildren(wrap, actions);
 }
 
 async function render() {
   if (!chrome.runtime?.id) return;
   try {
-    if (!Object.keys(currentSettings).length) {
+    if (!currentSettings.settingsVersion) {
       await loadSettings();
     }
+
     if (bannerDiv) bannerDiv.remove();
     clearLayoutOffset();
     if (!bannerVisible || !currentSettings.enabled) return;
@@ -205,6 +233,17 @@ async function render() {
     updateData();
   } catch (error) {
     console.error('Web Mark render failed:', error);
+  }
+}
+
+async function fetchWithTimeout(url, timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -225,15 +264,12 @@ async function updateData() {
           country = detectedCountry;
         } else {
           try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2500);
-            const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
-            clearTimeout(timeoutId);
+            const res = await fetchWithTimeout('https://ipapi.co/json/');
             const data = await res.json();
             detectedCountry = data.country_name;
             chrome.storage.local.set({ cachedCountry: detectedCountry });
             country = detectedCountry;
-          } catch (err) {
+          } catch {
             country = new Intl.DisplayNames(['en'], { type: 'region' }).of(new Intl.Locale(navigator.language).region || 'US');
           }
         }
@@ -242,34 +278,19 @@ async function updateData() {
 
     const now = new Date();
     const tz = settings.timezone === 'auto' ? undefined : settings.timezone;
-    const timeStr = now.toLocaleTimeString(undefined, {
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: tz, timeZoneName: 'short'
-    });
-    const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz });
-    const viewportStr = `${window.innerWidth} x ${window.innerHeight}`;
-    const userAgentStr = getUserAgentDisplay();
-    const ipStr = await getPublicIp(settings.showIp);
-
-    bannerDiv.innerHTML = `
-      <div class="wm-wrap">
-        ${settings.showUrl ? `<div class="wm-box wm-url-box" title="${escapeHtml(window.location.href)}"><span>URL:</span>${escapeHtml(window.location.href)}</div>` : ''}
-        ${settings.showDate ? `<div class="wm-box"><span>DATE:</span>${escapeHtml(dateStr)}</div>` : ''}
-        ${settings.showTime ? `<div class="wm-box"><span>TIME:</span>${escapeHtml(timeStr)}</div>` : ''}
-        ${settings.showCountry ? `<div class="wm-box"><span>LOC:</span>${escapeHtml(country || 'Unknown')}</div>` : ''}
-        ${settings.showIp ? `<div class="wm-box"><span>IP:</span>${escapeHtml(ipStr || 'Unavailable')}</div>` : ''}
-        ${settings.showViewport ? `<div class="wm-box"><span>VIEW:</span>${escapeHtml(viewportStr)}</div>` : ''}
-        ${settings.showUserAgent ? `<div class="wm-box wm-ua-box" title="${escapeHtml(userAgentStr)}"><span>UA:</span>${escapeHtml(userAgentStr)}</div>` : ''}
-      </div>
-      <div class="wm-actions">
-        <button id="wm-screenshot" aria-label="Take screenshot" title="Download Screenshot">📷</button>
-        <button id="wm-close" aria-label="Hide banner" title="Hide Banner">×</button>
-      </div>
-    `;
-
-    bannerDiv.querySelector('#wm-screenshot').onclick = () => {
-      handleScreenshot(settings.screenshotType);
+    const values = {
+      url: window.location.href,
+      date: now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: tz }),
+      time: now.toLocaleTimeString(undefined, {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: tz, timeZoneName: 'short'
+      }),
+      country,
+      ip: await getPublicIp(settings.showIp),
+      viewport: `${window.innerWidth} x ${window.innerHeight}`,
+      userAgent: getUserAgentDisplay()
     };
-    bannerDiv.querySelector('#wm-close').onclick = () => window.toggleWebMark();
+
+    createBannerLayout(settings, values);
   } catch (error) {
     console.error('Web Mark update failed:', error);
   }
@@ -286,10 +307,7 @@ async function getPublicIp(shouldFetch) {
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch('https://api64.ipify.org?format=json', { signal: controller.signal });
-    clearTimeout(timeoutId);
+    const res = await fetchWithTimeout('https://api64.ipify.org?format=json');
     const data = await res.json();
     detectedIp = data.ip;
     chrome.storage.local.set({ cachedIp: detectedIp, cachedIpAt: Date.now() });
@@ -308,26 +326,51 @@ function getUserAgentDisplay() {
   return navigator.userAgent;
 }
 
-async function waitForCaptureSettle() {
+async function waitForCaptureSettle(settleMs) {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  await new Promise((resolve) => setTimeout(resolve, 80));
+  await new Promise((resolve) => setTimeout(resolve, settleMs));
 }
 
 async function captureTile() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: 'capture_visible' }, (response) => resolve(response?.dataUrl));
+    chrome.runtime.sendMessage({ action: 'capture_visible' }, (response) => {
+      if (!response?.ok) {
+        console.warn('Capture tile failed:', response?.error || 'Unknown error');
+        resolve(null);
+        return;
+      }
+      resolve(response.dataUrl);
+    });
   });
 }
 
-async function handleScreenshot(type) {
-  if (type === 'fullpage') {
-    await captureFullPageScreenshot();
-  } else {
-    chrome.runtime.sendMessage({ action: 'take_screenshot' });
+function setAnimationSuppression(active) {
+  if (active && !animationBlockStyle) {
+    animationBlockStyle = document.createElement('style');
+    animationBlockStyle.id = 'wm-animation-block-style';
+    animationBlockStyle.textContent = '* { animation: none !important; transition: none !important; }';
+    document.documentElement.appendChild(animationBlockStyle);
+  }
+  if (!active && animationBlockStyle) {
+    animationBlockStyle.remove();
+    animationBlockStyle = null;
   }
 }
 
-async function captureFullPageScreenshot() {
+async function handleScreenshot(type, quality) {
+  if (type === 'fullpage') {
+    await captureFullPageScreenshot(quality);
+  } else {
+    chrome.runtime.sendMessage({ action: 'take_screenshot' }, (response) => {
+      if (!response?.ok) {
+        console.warn('Visible screenshot failed:', response?.error || 'Unknown error');
+      }
+    });
+  }
+}
+
+async function captureFullPageScreenshot(quality = 'balanced') {
+  const profile = getCaptureProfile(quality);
   const originalX = window.scrollX;
   const originalY = window.scrollY;
   const originalOverflow = document.documentElement.style.overflow;
@@ -337,12 +380,11 @@ async function captureFullPageScreenshot() {
 
   try {
     document.documentElement.style.overflow = 'hidden';
-    if (hadBanner && bannerDiv) {
-      bannerDiv.style.display = 'none';
-    }
+    setAnimationSuppression(profile.disableAnimation);
+    if (hadBanner && bannerDiv) bannerDiv.style.display = 'none';
     clearLayoutOffset();
     window.scrollTo(0, 0);
-    await waitForCaptureSettle();
+    await waitForCaptureSettle(profile.settleMs);
 
     const totalWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
     const totalHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
@@ -352,11 +394,7 @@ async function captureFullPageScreenshot() {
 
     const canvasWidth = Math.round(totalWidth * scale);
     const canvasHeight = Math.round(totalHeight * scale);
-    if (
-      canvasWidth > MAX_CAPTURE_DIMENSION
-      || canvasHeight > MAX_CAPTURE_DIMENSION
-      || (canvasWidth * canvasHeight) > MAX_CAPTURE_PIXELS
-    ) {
+    if (canvasWidth > MAX_CAPTURE_DIMENSION || canvasHeight > MAX_CAPTURE_DIMENSION || (canvasWidth * canvasHeight) > MAX_CAPTURE_PIXELS) {
       console.warn('Web Mark full-page screenshot exceeded canvas limits. Falling back to visible screenshot.');
       chrome.runtime.sendMessage({ action: 'take_screenshot' });
       return;
@@ -367,12 +405,16 @@ async function captureFullPageScreenshot() {
     canvas.height = canvasHeight;
     const ctx = canvas.getContext('2d');
 
-    for (let y = 0; y < totalHeight; y += viewportHeight) {
-      for (let x = 0; x < totalWidth; x += viewportWidth) {
+    const stepX = Math.max(1, viewportWidth - profile.overlap);
+    const stepY = Math.max(1, viewportHeight - profile.overlap);
+
+    for (let y = 0; y < totalHeight; y += stepY) {
+      for (let x = 0; x < totalWidth; x += stepX) {
         const tileWidth = Math.min(viewportWidth, totalWidth - x);
         const tileHeight = Math.min(viewportHeight, totalHeight - y);
         window.scrollTo(x, y);
-        await waitForCaptureSettle();
+        await waitForCaptureSettle(profile.settleMs);
+
         const dataUrl = await captureTile();
         if (!dataUrl) continue;
 
@@ -381,16 +423,20 @@ async function captureFullPageScreenshot() {
           img.onload = () => {
             const sourceWidth = Math.round(tileWidth * scale);
             const sourceHeight = Math.round(tileHeight * scale);
+            const cropLeft = x > 0 ? Math.round((profile.overlap / 2) * scale) : 0;
+            const cropTop = y > 0 ? Math.round((profile.overlap / 2) * scale) : 0;
+            const drawWidth = Math.max(1, sourceWidth - cropLeft);
+            const drawHeight = Math.max(1, sourceHeight - cropTop);
             ctx.drawImage(
               img,
-              0,
-              0,
-              sourceWidth,
-              sourceHeight,
-              Math.round(x * scale),
-              Math.round(y * scale),
-              sourceWidth,
-              sourceHeight
+              cropLeft,
+              cropTop,
+              drawWidth,
+              drawHeight,
+              Math.round(x * scale) + cropLeft,
+              Math.round(y * scale) + cropTop,
+              drawWidth,
+              drawHeight
             );
             resolve();
           };
@@ -400,11 +446,16 @@ async function captureFullPageScreenshot() {
     }
 
     const fullDataUrl = canvas.toDataURL('image/png');
-    chrome.runtime.sendMessage({ action: 'download_screenshot', dataUrl: fullDataUrl });
+    chrome.runtime.sendMessage({ action: 'download_screenshot', dataUrl: fullDataUrl }, (response) => {
+      if (!response?.ok) {
+        console.warn('Full-page screenshot download failed:', response?.error || 'Unknown error');
+      }
+    });
   } catch (error) {
     console.error('Web Mark full-page screenshot failed:', error);
     chrome.runtime.sendMessage({ action: 'take_screenshot' });
   } finally {
+    setAnimationSuppression(false);
     document.documentElement.style.overflow = originalOverflow;
     if (wasBannerVisible && hadBanner && bannerDiv) {
       bannerDiv.style.display = originalBannerDisplay;
@@ -416,11 +467,16 @@ async function captureFullPageScreenshot() {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync') return;
+  const merged = { ...currentSettings };
   Object.keys(changes).forEach((key) => {
-    currentSettings[key] = changes[key].newValue;
+    merged[key] = changes[key].newValue;
   });
+  setCurrentSettings(merged);
   render();
 });
+
+window.addEventListener('resize', scheduleLayoutRescan);
+window.addEventListener('scroll', scheduleLayoutRescan, { passive: true });
 
 setInterval(() => {
   if (bannerVisible && bannerDiv && chrome.runtime?.id) {

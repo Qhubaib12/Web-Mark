@@ -1,4 +1,5 @@
 const fields = [
+  'settingsVersion',
   'enabled',
   'showUrl',
   'showDate',
@@ -10,28 +11,34 @@ const fields = [
   'timezone',
   'manualCountry',
   'theme',
-  'screenshotType'
+  'screenshotType',
+  'screenshotQuality',
+  'smartHeaderOffset'
 ];
 
-const defaults = window.WEB_MARK_DEFAULTS || {
-  enabled: true,
-  showUrl: true,
-  showDate: true,
-  showTime: true,
-  showCountry: true,
-  showIp: false,
-  showViewport: false,
-  showUserAgent: false,
-  timezone: 'auto',
-  manualCountry: '',
-  theme: 'light',
-  screenshotType: 'visible'
-};
+const normalizeSettings = window.WEB_MARK_NORMALIZE_SETTINGS || ((input) => ({ ...(window.WEB_MARK_DEFAULTS || {}), ...input }));
+const defaults = window.WEB_MARK_DEFAULTS || {};
+
+const fallbackTimezones = [
+  'UTC',
+  'America/New_York',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Berlin',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney'
+];
 
 const populateTimezones = () => {
   const select = document.getElementById('timezone');
-  if (typeof Intl.supportedValuesOf !== 'function') return;
-  Intl.supportedValuesOf('timeZone').forEach((tz) => {
+  const zones = typeof Intl.supportedValuesOf === 'function'
+    ? Intl.supportedValuesOf('timeZone')
+    : fallbackTimezones;
+
+  zones.forEach((tz) => {
     const opt = document.createElement('option');
     opt.value = tz;
     opt.textContent = tz.replace(/_/g, ' ');
@@ -39,31 +46,46 @@ const populateTimezones = () => {
   });
 };
 
+const showStatus = (message, isError = false) => {
+  const status = document.getElementById('status');
+  status.innerText = message;
+  status.style.color = isError ? '#b00020' : '#1b5e20';
+  setTimeout(() => {
+    status.innerText = '';
+  }, 1800);
+};
+
 const save = () => {
   const data = {};
   fields.forEach((field) => {
     const el = document.getElementById(field);
+    if (!el) return;
     data[field] = el.type === 'checkbox' ? el.checked : el.value;
   });
 
-  chrome.storage.sync.set(data, () => {
-    const status = document.getElementById('status');
-    status.innerText = 'Saved successfully.';
-    setTimeout(() => {
-      status.innerText = '';
-    }, 1500);
+  const normalized = normalizeSettings(data);
+  chrome.storage.sync.set(normalized, () => {
+    if (chrome.runtime.lastError) {
+      showStatus(`Save failed: ${chrome.runtime.lastError.message}`, true);
+      return;
+    }
+    showStatus('Saved successfully.');
   });
 };
 
 const load = () => {
   populateTimezones();
   chrome.storage.sync.get(fields, (items) => {
+    const normalized = normalizeSettings({ ...defaults, ...items });
+    chrome.storage.sync.set(normalized);
+
     fields.forEach((field) => {
       const el = document.getElementById(field);
+      if (!el) return;
       if (el.type === 'checkbox') {
-        el.checked = items[field] ?? defaults[field];
+        el.checked = normalized[field] ?? defaults[field];
       } else {
-        el.value = items[field] || defaults[field];
+        el.value = normalized[field] || defaults[field];
       }
     });
   });
