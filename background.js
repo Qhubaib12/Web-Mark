@@ -14,7 +14,10 @@ chrome.action.onClicked.addListener((tab) => {
   }).then((results) => {
     if (!results[0]?.result) {
       chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['styles.css'] });
-      chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['defaults.js', 'content.js'] });
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['defaults.js', 'content.js']
+      });
     }
   }).catch((error) => {
     console.error('Web Mark failed to inject on tab click:', error);
@@ -37,50 +40,29 @@ const getScreenshotFilename = (tabUrl) => {
   }
 };
 
-function captureVisible(windowId, callback) {
-  chrome.tabs.captureVisibleTab(windowId, { format: 'png' }, (dataUrl) => {
-    if (chrome.runtime.lastError) {
-      callback({ ok: false, error: chrome.runtime.lastError.message });
-      return;
-    }
-    callback({ ok: true, dataUrl });
-  });
-}
-
-function downloadImage(dataUrl, tabUrl, sendResponse) {
-  chrome.downloads.download({
-    url: dataUrl,
-    filename: getScreenshotFilename(tabUrl),
-    saveAs: false
-  }, (downloadId) => {
-    if (chrome.runtime.lastError) {
-      const error = chrome.runtime.lastError.message;
-      console.error('Web Mark download failed:', error);
-      sendResponse?.({ ok: false, error });
-      return;
-    }
-    sendResponse?.({ ok: true, downloadId });
-  });
-}
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'capture_visible') {
-    captureVisible(sender.tab?.windowId, sendResponse);
+    chrome.tabs.captureVisibleTab(sender.tab?.windowId, { format: 'png' }, (dataUrl) => {
+      sendResponse({ dataUrl });
+    });
     return true;
   }
 
   if (message.action === 'download_screenshot') {
-    downloadImage(message.dataUrl, sender.tab?.url, sendResponse);
-    return true;
+    chrome.downloads.download({
+      url: message.dataUrl,
+      filename: getScreenshotFilename(sender.tab?.url),
+      saveAs: false
+    });
   }
 
   if (message.action === 'take_screenshot') {
-    captureVisible(sender.tab?.windowId, (captureResult) => {
-      if (!captureResult.ok) {
-        sendResponse({ ok: false, error: captureResult.error });
-        return;
-      }
-      downloadImage(captureResult.dataUrl, sender.tab?.url, sendResponse);
+    chrome.tabs.captureVisibleTab(sender.tab?.windowId, { format: 'png' }, (dataUrl) => {
+      chrome.downloads.download({
+        url: dataUrl,
+        filename: getScreenshotFilename(sender.tab?.url),
+        saveAs: false
+      });
     });
     return true;
   }
