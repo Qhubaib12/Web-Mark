@@ -202,13 +202,29 @@
                 <div class="row">
                     <div style="flex: 1;">
                         <label for="screenshotType">Screenshot Type</label>
-                        <div class="helper">Choose how the camera button captures the page.</div>
+                        <div class="helper">Choose how the camera button captures the page. Full page uses scroll-and-stitch and can be slower on long pages.</div>
                     </div>
                 </div>
                 <select id="screenshotType">
                     <option value="visible">Visible Page Only</option>
                     <option value="fullpage">Full Page (Scroll & Stitch)</option>
                 </select>
+                <div class="row" style="padding-top: 16px;">
+                    <div style="flex: 1;">
+                        <label for="screenshotQuality">Full Page Capture Quality</label>
+                        <div class="helper">Fast is quicker. Stable improves stitching on dynamic pages.</div>
+                    </div>
+                </div>
+                <select id="screenshotQuality">
+                    <option value="fast">Fast</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="stable">Stable</option>
+                </select>
+                <div class="row" style="padding-top: 16px;">
+                    <div style="flex: 1;">
+                        <div class="helper">Privacy note: Country and Public IP use third-party APIs (`ipapi.co` and `ipify.org`) only when those fields are enabled.</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -222,10 +238,18 @@
                     </div>
                 </div>
                 <select id="theme"><option value="light">Light Theme</option><option value="dark">Dark Theme</option></select>
+                <div class="row" style="padding-top: 16px;">
+                    <div style="flex: 1;">
+                        <label for="smartHeaderOffset">Smart Header Offset</label>
+                        <div class="helper">Experimental: auto-shift fixed/sticky page headers below the banner.</div>
+                    </div>
+                    <label class="toggle"><input type="checkbox" id="smartHeaderOffset"><span class="slider"></span></label>
+                </div>
             </div>
         </div>
         <div id="status" class="status"></div>
     </div>
+    <script src="defaults.js"></script>
     <script src="options.js"></script>
 </body>
 </html>
