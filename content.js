@@ -1,7 +1,7 @@
 window.hasWebMarkLoaded = true;
 
 const BANNER_HEIGHT = 40;
-const MAX_CAPTURE_PIXELS = 268000000;
+const MAX_CAPTURE_PIXELS = 120000000;
 const MAX_CAPTURE_DIMENSION = 32767;
 const LAYOUT_OBSERVER_LIFETIME_MS = 5000;
 
@@ -26,9 +26,9 @@ window.toggleWebMark = function toggleWebMark() {
 
 function getCaptureProfile(quality) {
   switch (quality) {
-    case 'fast': return { overlap: 0, settleMs: 40, disableAnimation: false };
-    case 'stable': return { overlap: 32, settleMs: 180, disableAnimation: true };
-    default: return { overlap: 16, settleMs: 100, disableAnimation: false };
+    case 'fast': return { settleMs: 40, disableAnimation: false };
+    case 'stable': return { settleMs: 180, disableAnimation: true };
+    default: return { settleMs: 100, disableAnimation: false };
   }
 }
 
@@ -335,7 +335,6 @@ async function captureTile() {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ action: 'capture_visible' }, (response) => {
       if (!response?.ok) {
-        console.warn('Capture tile failed:', response?.error || 'Unknown error');
         resolve(null);
         return;
       }
@@ -361,11 +360,7 @@ async function handleScreenshot(type, quality) {
   if (type === 'fullpage') {
     await captureFullPageScreenshot(quality);
   } else {
-    chrome.runtime.sendMessage({ action: 'take_screenshot' }, (response) => {
-      if (!response?.ok) {
-        console.warn('Visible screenshot failed:', response?.error || 'Unknown error');
-      }
-    });
+    chrome.runtime.sendMessage({ action: 'take_screenshot' });
   }
 }
 
@@ -395,7 +390,6 @@ async function captureFullPageScreenshot(quality = 'balanced') {
     const canvasWidth = Math.round(totalWidth * scale);
     const canvasHeight = Math.round(totalHeight * scale);
     if (canvasWidth > MAX_CAPTURE_DIMENSION || canvasHeight > MAX_CAPTURE_DIMENSION || (canvasWidth * canvasHeight) > MAX_CAPTURE_PIXELS) {
-      console.warn('Web Mark full-page screenshot exceeded canvas limits. Falling back to visible screenshot.');
       chrome.runtime.sendMessage({ action: 'take_screenshot' });
       return;
     }
@@ -404,9 +398,12 @@ async function captureFullPageScreenshot(quality = 'balanced') {
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
     const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const stepX = Math.max(1, viewportWidth - profile.overlap);
-    const stepY = Math.max(1, viewportHeight - profile.overlap);
+    const stepX = viewportWidth;
+    const stepY = viewportHeight;
+    let failedTiles = 0;
 
     for (let y = 0; y < totalHeight; y += stepY) {
       for (let x = 0; x < totalWidth; x += stepX) {
@@ -416,28 +413,35 @@ async function captureFullPageScreenshot(quality = 'balanced') {
         await waitForCaptureSettle(profile.settleMs);
 
         const dataUrl = await captureTile();
-        if (!dataUrl) continue;
+        if (!dataUrl) {
+          failedTiles += 1;
+          if (failedTiles > 2) {
+            chrome.runtime.sendMessage({ action: 'take_screenshot' });
+            return;
+          }
+          continue;
+        }
 
         await new Promise((resolve) => {
           const img = new Image();
           img.onload = () => {
-            const sourceWidth = Math.round(tileWidth * scale);
-            const sourceHeight = Math.round(tileHeight * scale);
-            const cropLeft = x > 0 ? Math.round((profile.overlap / 2) * scale) : 0;
-            const cropTop = y > 0 ? Math.round((profile.overlap / 2) * scale) : 0;
-            const drawWidth = Math.max(1, sourceWidth - cropLeft);
-            const drawHeight = Math.max(1, sourceHeight - cropTop);
+            const sourceWidth = Math.min(img.naturalWidth, Math.round(tileWidth * scale));
+            const sourceHeight = Math.min(img.naturalHeight, Math.round(tileHeight * scale));
             ctx.drawImage(
               img,
-              cropLeft,
-              cropTop,
-              drawWidth,
-              drawHeight,
-              Math.round(x * scale) + cropLeft,
-              Math.round(y * scale) + cropTop,
-              drawWidth,
-              drawHeight
+              0,
+              0,
+              sourceWidth,
+              sourceHeight,
+              Math.round(x * scale),
+              Math.round(y * scale),
+              sourceWidth,
+              sourceHeight
             );
+            resolve();
+          };
+          img.onerror = () => {
+            failedTiles += 1;
             resolve();
           };
           img.src = dataUrl;
@@ -446,11 +450,7 @@ async function captureFullPageScreenshot(quality = 'balanced') {
     }
 
     const fullDataUrl = canvas.toDataURL('image/png');
-    chrome.runtime.sendMessage({ action: 'download_screenshot', dataUrl: fullDataUrl }, (response) => {
-      if (!response?.ok) {
-        console.warn('Full-page screenshot download failed:', response?.error || 'Unknown error');
-      }
-    });
+    chrome.runtime.sendMessage({ action: 'download_screenshot', dataUrl: fullDataUrl }, () => {});
   } catch (error) {
     console.error('Web Mark full-page screenshot failed:', error);
     chrome.runtime.sendMessage({ action: 'take_screenshot' });
