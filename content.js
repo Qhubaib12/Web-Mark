@@ -255,25 +255,7 @@ async function updateData() {
     let country = settings.manualCountry;
 
     if (!country) {
-      if (detectedCountry) {
-        country = detectedCountry;
-      } else {
-        const local = await chrome.storage.local.get(['cachedCountry']);
-        if (local.cachedCountry) {
-          detectedCountry = local.cachedCountry;
-          country = detectedCountry;
-        } else {
-          try {
-            const res = await fetchWithTimeout('https://ipapi.co/json/');
-            const data = await res.json();
-            detectedCountry = data.country_name;
-            chrome.storage.local.set({ cachedCountry: detectedCountry });
-            country = detectedCountry;
-          } catch {
-            country = new Intl.DisplayNames(['en'], { type: 'region' }).of(new Intl.Locale(navigator.language).region || 'US');
-          }
-        }
-      }
+      country = await getDetectedCountry();
     }
 
     const now = new Date();
@@ -296,9 +278,49 @@ async function updateData() {
   }
 }
 
+
+async function getDetectedCountry() {
+  if (detectedCountry) return detectedCountry;
+
+  const cached = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
+  if (cached.cachedGeo?.country && isFreshGeoCache(cached.cachedGeoAt)) {
+    detectedCountry = cached.cachedGeo.country;
+    detectedIp = cached.cachedGeo.ip || detectedIp;
+    return detectedCountry;
+  }
+
+  const geo = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'get_geo_location' }, (response) => {
+      if (chrome.runtime.lastError || !response?.ok) {
+        resolve(null);
+        return;
+      }
+      resolve(response);
+    });
+  });
+
+  if (geo?.country) {
+    detectedCountry = geo.country;
+    detectedIp = geo.ip || detectedIp;
+    return detectedCountry;
+  }
+
+  return '';
+}
+
+function isFreshGeoCache(cachedAt) {
+  return cachedAt && (Date.now() - cachedAt) < 60 * 60 * 1000;
+}
+
 async function getPublicIp(shouldFetch) {
   if (!shouldFetch) return '';
   if (detectedIp) return detectedIp;
+
+  const geo = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
+  if (geo.cachedGeo?.ip && isFreshGeoCache(geo.cachedGeoAt)) {
+    detectedIp = geo.cachedGeo.ip;
+    return detectedIp;
+  }
 
   const cached = await chrome.storage.local.get(['cachedIp', 'cachedIpAt']);
   if (cached.cachedIp && cached.cachedIpAt && (Date.now() - cached.cachedIpAt) < 10 * 60 * 1000) {
