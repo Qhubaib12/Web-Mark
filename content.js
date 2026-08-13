@@ -9,6 +9,7 @@ let bannerVisible = true;
 let bannerDiv = null;
 let detectedCountry = null;
 let detectedIp = null;
+let detectedCountryCode = null;
 let currentSettings = (window.WEB_MARK_NORMALIZE_SETTINGS || ((v) => v))(window.WEB_MARK_DEFAULTS || {});
 let layoutObserver = null;
 let layoutObserverStopTimer = null;
@@ -282,10 +283,16 @@ async function updateData() {
 async function getDetectedCountry() {
   if (detectedCountry) return detectedCountry;
 
-  const cached = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
-  if (cached.cachedGeo?.country && isFreshGeoCache(cached.cachedGeoAt)) {
+  const cached = await chrome.storage.local.get(['cachedGeo', 'cachedCountry']);
+  if (cached.cachedGeo?.country) {
     detectedCountry = cached.cachedGeo.country;
+    detectedCountryCode = cached.cachedGeo.countryCode || null;
     detectedIp = cached.cachedGeo.ip || detectedIp;
+    return detectedCountry;
+  }
+
+  if (cached.cachedCountry) {
+    detectedCountry = cached.cachedCountry;
     return detectedCountry;
   }
 
@@ -301,23 +308,25 @@ async function getDetectedCountry() {
 
   if (geo?.country) {
     detectedCountry = geo.country;
+    detectedCountryCode = geo.countryCode || null;
     detectedIp = geo.ip || detectedIp;
     return detectedCountry;
   }
 
-  return '';
+  return getBrowserLocaleCountry();
 }
 
-function isFreshGeoCache(cachedAt) {
-  return cachedAt && (Date.now() - cachedAt) < 60 * 60 * 1000;
+function getBrowserLocaleCountry() {
+  const region = new Intl.Locale(navigator.language).region || 'US';
+  return new Intl.DisplayNames(['en'], { type: 'region' }).of(region);
 }
 
 async function getPublicIp(shouldFetch) {
   if (!shouldFetch) return '';
   if (detectedIp) return detectedIp;
 
-  const geo = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
-  if (geo.cachedGeo?.ip && isFreshGeoCache(geo.cachedGeoAt)) {
+  const geo = await chrome.storage.local.get(['cachedGeo']);
+  if (geo.cachedGeo?.ip) {
     detectedIp = geo.cachedGeo.ip;
     return detectedIp;
   }
