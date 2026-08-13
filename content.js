@@ -9,6 +9,7 @@ let bannerVisible = true;
 let bannerDiv = null;
 let detectedCountry = null;
 let detectedIp = null;
+let detectedCountryCode = null;
 let currentSettings = (window.WEB_MARK_NORMALIZE_SETTINGS || ((v) => v))(window.WEB_MARK_DEFAULTS || {});
 let layoutObserver = null;
 let layoutObserverStopTimer = null;
@@ -308,6 +309,12 @@ async function getPublicIp(shouldFetch) {
 
   const geo = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
   if (geo.cachedGeo?.ip && isFreshGeoCache(geo.cachedGeoAt)) {
+    detectedIp = geo.cachedGeo.ip;
+    return detectedIp;
+  }
+
+  const geo = await chrome.storage.local.get(['cachedGeo']);
+  if (geo.cachedGeo?.ip) {
     detectedIp = geo.cachedGeo.ip;
     return detectedIp;
   }
