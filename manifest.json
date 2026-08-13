@@ -20,5 +20,9 @@
   },
   "icons": {
     "128": "icon.png"
-  }
+  },
+  "host_permissions": [
+    "https://ipapi.co/*",
+    "https://api64.ipify.org/*"
+  ]
 }

@@ -63,7 +63,54 @@ function downloadImage(dataUrl, tabUrl, sendResponse) {
   });
 }
 
+
+async function fetchJsonWithTimeout(url, timeoutMs = 3000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function detectGeoLocation() {
+  const cacheMaxAgeMs = 60 * 60 * 1000;
+  const cached = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
+  if (cached.cachedGeo?.country && cached.cachedGeoAt && (Date.now() - cached.cachedGeoAt) < cacheMaxAgeMs) {
+    return { ok: true, ...cached.cachedGeo };
+  }
+
+  const data = await fetchJsonWithTimeout('https://ipapi.co/json/');
+  const geo = {
+    country: data.country_name || '',
+    countryCode: data.country_code || '',
+    ip: data.ip || ''
+  };
+
+  if (!geo.country) {
+    throw new Error('Country was not returned by the location service.');
+  }
+
+  await chrome.storage.local.set({ cachedGeo: geo, cachedGeoAt: Date.now() });
+  return { ok: true, ...geo };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'get_geo_location') {
+    detectGeoLocation()
+      .then(sendResponse)
+      .catch((error) => {
+        console.error('Web Mark location detection failed:', error);
+        sendResponse({ ok: false, error: error.message });
+      });
+    return true;
+  }
+
   if (message.action === 'capture_visible') {
     captureVisible(sender.tab?.windowId, sendResponse);
     return true;
