@@ -78,65 +78,26 @@ async function fetchJsonWithTimeout(url, timeoutMs = 3000) {
   }
 }
 
-function normalizeGeoResult(data = {}) {
-  return {
-    country: data.country_name || data.country || '',
-    countryCode: data.country_code || data.countryCode || '',
+async function detectGeoLocation() {
+  const cacheMaxAgeMs = 60 * 60 * 1000;
+  const cached = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
+  if (cached.cachedGeo?.country && cached.cachedGeoAt && (Date.now() - cached.cachedGeoAt) < cacheMaxAgeMs) {
+    return { ok: true, ...cached.cachedGeo };
+  }
+
+  const data = await fetchJsonWithTimeout('https://ipapi.co/json/');
+  const geo = {
+    country: data.country_name || '',
+    countryCode: data.country_code || '',
     ip: data.ip || ''
   };
-}
 
-async function getCurrentPublicIp() {
-  const data = await fetchJsonWithTimeout('https://api64.ipify.org?format=json');
-  if (!data.ip) {
-    throw new Error('Public IP was not returned by the IP service.');
-  }
-  return data.ip;
-}
-
-async function detectGeoLocation() {
-  const cacheMaxAgeMs = 5 * 60 * 1000;
-  const cached = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
-  let currentIp = '';
-
-  try {
-    currentIp = await getCurrentPublicIp();
-    if (
-      cached.cachedGeo?.country
-      && cached.cachedGeo?.ip === currentIp
-      && cached.cachedGeoAt
-      && (Date.now() - cached.cachedGeoAt) < cacheMaxAgeMs
-    ) {
-      return { ok: true, ...cached.cachedGeo };
-    }
-  } catch (error) {
-    console.warn('Web Mark could not preflight public IP:', error);
+  if (!geo.country) {
+    throw new Error('Country was not returned by the location service.');
   }
 
-  const providers = [
-    currentIp ? `https://ipapi.co/${currentIp}/json/` : 'https://ipapi.co/json/',
-    currentIp ? `https://ipwho.is/${currentIp}` : 'https://ipwho.is/'
-  ];
-  const errors = [];
-
-  for (const provider of providers) {
-    try {
-      const data = await fetchJsonWithTimeout(provider);
-      const geo = normalizeGeoResult(data);
-      if (currentIp) geo.ip = currentIp;
-      if (!geo.country) {
-        throw new Error('Country was not returned by the location service.');
-      }
-
-      await chrome.storage.local.set({ cachedGeo: geo, cachedGeoAt: Date.now() });
-      await chrome.storage.local.remove(['cachedCountry']);
-      return { ok: true, ...geo };
-    } catch (error) {
-      errors.push(`${provider}: ${error.message}`);
-    }
-  }
-
-  throw new Error(errors.join('; '));
+  await chrome.storage.local.set({ cachedGeo: geo, cachedGeoAt: Date.now() });
+  return { ok: true, ...geo };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

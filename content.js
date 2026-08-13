@@ -281,6 +281,21 @@ async function updateData() {
 
 
 async function getDetectedCountry() {
+  if (detectedCountry) return detectedCountry;
+
+  const cached = await chrome.storage.local.get(['cachedGeo', 'cachedCountry']);
+  if (cached.cachedGeo?.country) {
+    detectedCountry = cached.cachedGeo.country;
+    detectedCountryCode = cached.cachedGeo.countryCode || null;
+    detectedIp = cached.cachedGeo.ip || detectedIp;
+    return detectedCountry;
+  }
+
+  if (cached.cachedCountry) {
+    detectedCountry = cached.cachedCountry;
+    return detectedCountry;
+  }
+
   const geo = await new Promise((resolve) => {
     chrome.runtime.sendMessage({ action: 'get_geo_location' }, (response) => {
       if (chrome.runtime.lastError || !response?.ok) {
@@ -293,25 +308,22 @@ async function getDetectedCountry() {
 
   if (geo?.country) {
     detectedCountry = geo.country;
+    detectedCountryCode = geo.countryCode || null;
     detectedIp = geo.ip || detectedIp;
     return detectedCountry;
   }
 
-  return '';
+  return getBrowserLocaleCountry();
 }
 
-function isFreshGeoCache(cachedAt) {
-  return cachedAt && (Date.now() - cachedAt) < 5 * 60 * 1000;
+function getBrowserLocaleCountry() {
+  const region = new Intl.Locale(navigator.language).region || 'US';
+  return new Intl.DisplayNames(['en'], { type: 'region' }).of(region);
 }
 
 async function getPublicIp(shouldFetch) {
   if (!shouldFetch) return '';
-
-  const geo = await chrome.storage.local.get(['cachedGeo', 'cachedGeoAt']);
-  if (geo.cachedGeo?.ip && isFreshGeoCache(geo.cachedGeoAt)) {
-    detectedIp = geo.cachedGeo.ip;
-    return detectedIp;
-  }
+  if (detectedIp) return detectedIp;
 
   const geo = await chrome.storage.local.get(['cachedGeo']);
   if (geo.cachedGeo?.ip) {
