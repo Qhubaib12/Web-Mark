@@ -23,7 +23,6 @@
   },
   "host_permissions": [
     "https://ipapi.co/*",
-    "https://api64.ipify.org/*",
-    "https://ipwho.is/*"
+    "https://api64.ipify.org/*"
   ]
 }
